@@ -1,0 +1,50 @@
+# Control de versiones
+.git/
+.gitignore
+.gitattributes
+
+# Entornos virtuales y dependencias de desarrollo
+.venv/
+venv/
+env/
+__pypackages__/
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Pruebas automatizadas y reportes de cobertura
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+
+# Linters y cachés de análisis estático
+.ruff_cache/
+.mypy_cache/
+
+# Archivos de compilación de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Documentación viva y bitácoras de trabajo
+docs/
+*.md
+!README.md
+AGENTS.md
+
+# Archivos de entorno de desarrollo y asistentes
+.gemini/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Datos transitorios generados en ejecución local
+data/vectorstore/
+data/audit/
+*.log

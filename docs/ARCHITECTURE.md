@@ -14,31 +14,44 @@ Este documento formaliza la arquitectura del sistema, el flujo de procesamiento 
 
 ## 2. Flujo de Datos y Razonamiento
 
-```text
-[Consulta Entrante]
-        │
-        ▼
-[FastAPI /api/v1/chat] ────▶ [Filtro Sanitizador & Validaciones]
-                                        │
-                                        ▼
-                        [Agente / Orquestador LangGraph]
-                                        │
-            ┌───────────────────────────┴───────────────────────────┐
-            ▼                                                       ▼
-[Condición: Requiere Manuales]                         [Condición: Requiere Acción]
-            │                                                       │
-[Vector Store Retrieval]                                    [Tool Invocation]
-  - Query Embedding                                           - get_ticket_status
-  - Similarity Search (Top-3)                                 - calculate_incident_priority
-  - Context Assembly                                                │
-            │                                                       │
-            └───────────────────────────┬───────────────────────────┘
-                                        ▼
-                            [Síntesis con LLM Fundamentada]
-                                        │
-                                        ▼
-                        [Respuesta JSON + Citas de Fuentes]
+```mermaid
+flowchart TD
+    subgraph Gateway["1. Puerta de Entrada (FastAPI + Pydantic v2)"]
+        User([Usuario / Swagger / Cliente]) -->|POST /api/v1/chat| Ingest[Validación de Esquema ChatRequest]
+        Ingest --> Guardrail[Filtro Sanitizador & Control de Prompt Injection]
+    end
+
+    subgraph Orchestrator["2. Orquestador Agentic (LangGraph)"]
+        Guardrail --> StateGraph[Grafo de Estados con límite de pasos = 5]
+        StateGraph --> LLM[ChatOpenAI: gpt-5-mini]
+        
+        LLM -->|Decide Tool Calling| Router{¿Qué acción requiere?}
+    end
+
+    subgraph Execution["3. Capa de Ejecución y Datos"]
+        Router -->|Requiere procedimiento técnico| RAGTool[search_technical_documentation]
+        Router -->|Requiere ver un ticket| TicketTool[get_ticket_status]
+        Router -->|Requiere priorizar incidente| IncidentTool[calculate_incident_priority]
+        
+        RAGTool --> ChromaDB[(ChromaDB: Colección con Métrica Coseno)]
+        TicketTool --> MockDB[(data/mock_tickets.json)]
+        IncidentTool --> RuleEngine[Matriz de Reglas de SLA]
+    end
+
+    subgraph Observability["4. Observabilidad & Respuesta"]
+        RAGTool & TicketTool & IncidentTool --> AuditLog[(data/audit/audit.jsonl)]
+        RAGTool & TicketTool & IncidentTool --> LLM
+        LLM --> Formatter[Evaluador de Groundedness & Formateador ChatResponse]
+        Formatter --> Output([Respuesta JSON con Citas, Tools y Latencia])
+    end
 ```
+
+### Ciclo de Procesamiento Paso a Paso:
+1. **Entrada y Validación:** El endpoint `POST /api/v1/chat` recibe el payload validado contra `ChatRequest`, asigna o genera `session_id` (UUID4) e inyecta el `correlation_id` en el contexto de logging.
+2. **Razonamiento en Grafo:** LangGraph evalúa la consulta dentro de delimitadores XML (`<context>`, `<question>`) para neutralizar inyecciones de prompt (TC-05).
+3. **Ejecución Determinista:** Según la intención, invoca `get_ticket_status` (TC-02), `calculate_incident_priority` (TC-03) o `search_technical_documentation` (TC-01). Cada llamada se audita en `data/audit/audit.jsonl` (D12).
+4. **Síntesis y Groundedness:** El LLM redacta la respuesta usando solo las fuentes. Se evalúa `grounded: bool` deterministamente frente a `SIMILARITY_THRESHOLD=0.70` (D11). Si no hay información suficiente, emite la respuesta estándar de TC-04.
+5. **Respuesta Estructurada:** Retorna `ChatResponse` con texto, citas, métricas de herramientas y latencia.
 
 ---
 

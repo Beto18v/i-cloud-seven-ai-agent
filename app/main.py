@@ -1,8 +1,7 @@
 """Punto de entrada ASGI del Enterprise Legacy Assistant.
 
-Expone la aplicación FastAPI mínima de la Fase 1: arranque seguro, CORS
-configurable y sondas de salud. Los routers de negocio (``/api/v1``) se
-incorporan en fases posteriores.
+Expone la aplicación FastAPI del Enterprise Legacy Assistant: arranque seguro, CORS
+configurable, sondas de salud y routers de negocio bajo ``/api/v1``.
 
 Aislamiento de pruebas
 ----------------------
@@ -26,6 +25,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.router import api_v1_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.models.health import HealthResponse, HealthStatus
@@ -75,7 +75,7 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         description=(
             "Asistente RAG empresarial sobre sistemas legados. "
-            "Fase 1: configuración, logging estructurado y sonda de salud."
+            "Endpoints API v1 para chat conversacional, ingesta RAG, tickets y auditoría."
         ),
         debug=settings.debug,
         lifespan=lifespan,
@@ -88,6 +88,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    application.include_router(api_v1_router, prefix="/api/v1")
 
     @application.get(
         "/health",
