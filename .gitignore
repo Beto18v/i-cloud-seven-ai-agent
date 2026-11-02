@@ -37,3 +37,7 @@ data/audit/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# --- Herramientas de IA y agentes --------------------------------------------
+.atl/
+
