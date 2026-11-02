@@ -1,0 +1,79 @@
+[
+  {
+    "ticket_id": "TCK-101",
+    "title": "Caída del servicio de autenticación LDAP legado",
+    "description": "El servidor de autenticación de solicitudes internas no responde a los intentos de enlace LDAP, bloqueando el acceso a 520 usuarios corporativos.",
+    "status": "open",
+    "priority": "critical",
+    "reported_by": "alberto.rodriguez@empresa.com",
+    "assigned_to": "Equipo Infraestructura",
+    "created_at": "2026-10-30T08:00:00Z",
+    "updated_at": "2026-10-30T08:15:00Z"
+  },
+  {
+    "ticket_id": "TCK-102",
+    "title": "Intermitencia en generación de reportes contables PDF",
+    "description": "Los reportes mensuales de balance general tardan más de 15 minutos en generarse o lanzan error por timeout en el worker de renderizado.",
+    "status": "in_progress",
+    "priority": "medium",
+    "reported_by": "lucia.patino@empresa.com",
+    "assigned_to": "Diana Morales",
+    "created_at": "2026-10-29T11:20:00Z",
+    "updated_at": "2026-10-30T07:45:00Z"
+  },
+  {
+    "ticket_id": "TCK-103",
+    "title": "Actualización de certificados SSL en portal interno de pruebas",
+    "description": "Renovación preventiva del certificado autofirmado en el ambiente de preproducción antes de su expiración a fin de trimestre.",
+    "status": "open",
+    "priority": "low",
+    "reported_by": "fernando.castro@empresa.com",
+    "assigned_to": null,
+    "created_at": "2026-10-27T16:00:00Z",
+    "updated_at": "2026-10-27T16:00:00Z"
+  },
+  {
+    "ticket_id": "TCK-104",
+    "title": "Fallo de sincronización en módulo de facturación legado",
+    "description": "El lote nocturno de facturación del sistema legado falló con código de error SYNC-902 tras el corte del fin de mes.",
+    "status": "resolved",
+    "priority": "high",
+    "reported_by": "maria.gonzalez@empresa.com",
+    "assigned_to": "Carlos Mendoza",
+    "created_at": "2026-10-28T14:30:00Z",
+    "updated_at": "2026-10-29T09:15:00Z"
+  },
+  {
+    "ticket_id": "TCK-105",
+    "title": "Bloqueo por transacciones largas en tabla de inventarios",
+    "description": "Múltiples consultas bloqueadas esperando bloqueo exclusivo en tabla transaccional legado_stock_movements generadas por el proceso nocturno de conciliación.",
+    "status": "in_progress",
+    "priority": "high",
+    "reported_by": "jorge.navarro@empresa.com",
+    "assigned_to": "Andrés Silva",
+    "created_at": "2026-10-29T22:10:00Z",
+    "updated_at": "2026-10-30T06:30:00Z"
+  },
+  {
+    "ticket_id": "TCK-106",
+    "title": "Depuración de archivos temporales en spooler de impresión",
+    "description": "Liberación programada de espacio en disco en /var/spool/legacy_printers tras acumulación de trabajos huérfanos del mes anterior.",
+    "status": "closed",
+    "priority": "low",
+    "reported_by": "soporte.ti@empresa.com",
+    "assigned_to": "Diana Morales",
+    "created_at": "2026-10-25T10:00:00Z",
+    "updated_at": "2026-10-26T12:00:00Z"
+  },
+  {
+    "ticket_id": "TCK-1001",
+    "title": "Saturación del pool de conexiones en base de datos transaccional",
+    "description": "El pool de conexiones relacional alcanzó el límite máximo de 200 conexiones concurrentes, provocando rechazo de peticiones en el gateway API legado.",
+    "status": "resolved",
+    "priority": "critical",
+    "reported_by": "monitoreo.ops@empresa.com",
+    "assigned_to": "Carlos Mendoza",
+    "created_at": "2026-10-28T02:15:00Z",
+    "updated_at": "2026-10-28T04:45:00Z"
+  }
+]

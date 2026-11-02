@@ -290,9 +290,26 @@ Observación honesta: `openai_api_key_configured` y `azure_openai_api_key_config
 | Contrato de salud (`app/models/health.py`) | Completo | `/health` y `/docs` cubiertos con `TestClient` |
 | Entrypoint ASGI (`app/main.py`) | Completo | `create_app()`, `lifespan` y CORS desde settings |
 | Contratos de chat y ticket (`app/models/chat.py`, `ticket.py`) | Completo | 51 pruebas en `tests/test_models.py` |
-| Pruebas automatizadas versionadas | 95 pasando | `uv run pytest -q` → `95 passed in 0.45s` |
-| Datos sintéticos (`data/documents/`, `data/mock_tickets.json`) | Pendiente (siguiente unidad) | Directorios listos para ingesta |
+| Datos sintéticos (`data/documents/`, `data/mock_tickets.json`) | Completo | 7 tickets validados (incluye `TCK-104`), 3 manuales RAG y 10 pruebas |
+| Pruebas automatizadas versionadas | 105 pasando | `uv run pytest -q` → `105 passed in 0.55s` |
+| Cierre formal Fase 1 (Revisión adversarial) | Pendiente | Obligatorio antes de abrir Fase 2 (`AGENTS.md` § 7.3) |
 | Servicios RAG y vector store | Pendiente (Fase 2) | — |
 | Herramientas y agente LangGraph | Pendiente (Fase 3) | — |
 | Endpoints `/api/v1` | Pendiente (Fase 4) | — |
 | Matriz TC-01…TC-05 | Pendiente (Fase 5) | — |
+
+### 6.7 Sesión 2026-11-02 — Fase 1: Datos sintéticos mock, manuales RAG y pruebas de dataset
+
+**Autorización:** el Ingeniero Líder autorizó la generación de datos sintéticos y manuales técnicos, habilitando además la realización de commits atómicos controlados para hitos comprobables.
+
+**Delegación:** se delegó la tarea al subagente escritor `model-contracts-writer`, cumpliendo `AGENTS.md` § 7.1 y § 7.2.
+
+| # | Comando / Acción | Motivo | Resultado |
+| :-: | :--- | :--- | :--- |
+| 25 | Creación de `data/mock_tickets.json` | Proveer dataset sintético realista para el sistema legado y para la Tool 1 (`get_ticket_status`). | 7 tickets conformes al modelo `Ticket` (incluye `TCK-104` con asignación para TC-02, timestamps UTC y variedad de estados/prioridades). |
+| 26 | Creación de `data/documents/*.md` | Generar manuales técnicos para el pipeline RAG estructurados con jerarquía Markdown limpia. | 3 manuales: `manual_operaciones_v2.md` (procedimiento de reinicio legado para TC-01), `resolucion_bloqueos_bd.md` y `politicas_sla_escalamiento.md`. |
+| 27 | Creación de `tests/test_mock_data.py` | Pruebas automatizadas de integridad de datos y manuales. | 10 pruebas unitarias pasando (validación de esquema Pydantic, unicidad de IDs y existencia de términos clave). |
+| 28 | `uv run ruff format app tests` | Formateo estricto del código. | `15 files left unchanged` |
+| 29 | `uv run ruff check app tests` | Análisis estático de linting e imports. | `All checks passed!` |
+| 30 | `uv run mypy app` | Tipado estricto sin tipos `Any` injustificados. | `Success: no issues found in 9 source files` |
+| 31 | `uv run pytest -q` | Ejecución de la suite completa. | `105 passed in 0.55s` |
