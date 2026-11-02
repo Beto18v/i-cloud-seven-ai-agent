@@ -328,3 +328,28 @@ Observación honesta: `openai_api_key_configured` y `azure_openai_api_key_config
 - `uv run mypy app`: `Success: no issues found in 12 source files`
 - `uv run pytest -q`: `117 passed in 5.03s`
 
+### 6.9 Sesión 2026-11-02 — Fase 3: Herramientas Operativas, Auditoría y Agente LangGraph
+
+**Autorización:** el Ingeniero Líder autorizó la implementación de la Fase 3 del proyecto, cubriendo las herramientas de soporte (`get_ticket_status`, `calculate_incident_priority`), la herramienta documental RAG (`create_rag_tool`), el servicio de auditoría estructurada (`AuditService`) y el orquestador conversacional con LangGraph (`AgentService`).
+
+**Componentes implementados:**
+1. **`app/tools/ticket_tools.py`:** herramienta `@tool` `get_ticket_status` para consulta de tickets en `mock_tickets.json` con normalización insensible a mayúsculas y espacios, y retorno estructurado de campos clave o reporte de error si no existe.
+2. **`app/tools/incident_tools.py`:** herramienta `@tool` `calculate_incident_priority` con motor determinista de clasificación de severidad y SLA cuantitativo según usuarios afectados y criticidad del servicio (D10).
+3. **`app/tools/rag_tools.py`:** función factory `create_rag_tool` que conecta la herramienta con `RAGService` y acumula referencias bibliográficas en un `sources_tracker` para alimentar `ChatResponse.sources`.
+4. **`app/tools/__init__.py`:** reexportación unificada de herramientas y factory.
+5. **`app/services/audit.py`:** servicio `AuditService` para registro en formato JSON Lines (`data/audit/audit.jsonl`) con latencias, argumentos, resultado y éxito (D12), y lectura con soporte de límite y orden cronológico.
+6. **`app/services/agent.py`:** orquestador conversacional LangGraph con `StateGraph`, `ToolNode` y `tools_condition`. Incluye:
+   - Límite de recursión configurable (`settings.agent_recursion_limit = 5`).
+   - Mitigación de prompt injection con guardrail estricto de entrada y reglas en system prompt (TC-05).
+   - Respuesta estándar obligatoria ante falta de información técnica interna (TC-04).
+   - Determinación determinista de `grounded` basada en umbral de similitud RAG (D11).
+   - Sanitización del contrato público de respuesta (`ToolCallSummary`, D12).
+7. **`tests/test_tools.py`, `tests/test_audit.py`, `tests/test_agent.py`:** 38 nuevas pruebas unitarias ejecutadas sin conexión a internet ni consumo de APIs usando `FakeMessagesListChatModel` con `bind_tools` simulado.
+
+**Evidencia de Verificación:**
+- `uv run ruff format app tests`: `29 files left unchanged`
+- `uv run ruff check app tests`: `All checks passed!`
+- `uv run mypy app`: `Success: no issues found in 18 source files`
+- `uv run pytest -q`: `155 passed in 5.50s`
+
+
