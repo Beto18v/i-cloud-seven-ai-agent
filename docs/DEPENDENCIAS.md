@@ -279,11 +279,25 @@ Esto reduce la superficie de configuración y elimina una fuente clásica de err
 
 | Elemento | Estado (verificado en la programación de retiros de Microsoft) | Implicación |
 | :--- | :--- | :--- |
-| `gpt-4o-mini` (README/ARCHITECTURE actuales) | **Deprecated**, retiro 2027-04-14 | Usarlo hoy en una prueba técnica es una señal de desactualización. |
-| `text-embedding-3-small` | GA hasta 2028-02-09 | Elección segura y vigente. |
-| Familia `gpt-5*` (GA) | Activa, con retiros 2027-2028 | Candidata a reemplazo del modelo de chat. |
+| `gpt-4o-mini` (versión anterior de esta documentación) | **Deprecated**, retiro 2027-04-14 | Descartado como base: habría nacido con fecha de caducidad. |
+| `text-embedding-3-small` | GA hasta 2028-02-09 | Elección segura y vigente. **Adoptado.** |
+| `gpt-5-mini` | GA, familia activa | **Adoptado** como deployment de chat (decisión 3A). |
 
-**Riesgo abierto:** los deployments de la familia `gpt-5` pueden **rechazar `temperature` y `max_tokens`** (usan `max_completion_tokens`). Antes de construir el agente hay que hacer **una llamada real de 1 token** al deployment y confirmar qué parámetros acepta; el contrato de configuración se ajusta a esa evidencia, no a la documentación genérica.
+**Riesgo abierto:** los deployments de la familia `gpt-5` pueden **rechazar `temperature` y `max_tokens`** (usan `max_completion_tokens`). Antes de construir el agente hay que hacer **una llamada real de 1 token** al deployment y confirmar qué parámetros acepta; el contrato de configuración se ajusta a esa evidencia, no a la documentación genérica. Mientras tanto, `LLM_TEMPERATURE` es opcional y vacía por defecto, de modo que el parámetro **no se envía**.
+
+### 11.4 Configuración resultante (implementada en `app/core/config.py`)
+
+| Variable | Valor por defecto | Comentario |
+| :--- | :--- | :--- |
+| `AI_PROVIDER` | `azure_openai` | `openai` activa el *fallback* sin cambiar código. |
+| `AZURE_OPENAI_ENDPOINT` | *(obligatoria)* | `HttpUrl`. El `/openai/v1` lo añade el cliente, no el operador. |
+| `AZURE_OPENAI_CHAT_DEPLOYMENT` | *(obligatoria)* | Nombre de deployment, no de modelo. |
+| `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | *(obligatoria)* | Ídem. |
+| `AZURE_OPENAI_API_VERSION` | **eliminada** | La API v1 no la usa. |
+| `LLM_TEMPERATURE` | *(vacía)* | Vacía ⇒ el parámetro no se envía. |
+| `VECTOR_STORE_SPACE` | `cosine` | Obligatoria para que el umbral 0.70 sea interpretable. |
+
+La validación es **fail-fast**: si `AI_PROVIDER=azure_openai` y falta cualquier credencial o deployment, el proceso no arranca y el mensaje nombra exactamente la variable ausente.
 
 ---
 
@@ -299,3 +313,8 @@ Esto reduce la superficie de configuración y elimina una fuente clásica de err
 | 2026-10-31 | Reorganización del repositorio | `Remove-Item main.py` · `Move-Item ARCHITECTURE.md, AI_DEVELOPMENT_LOG.md, PRUEBA_ORIGINAL.md docs\` | Raíz limpia; documentación alineada con el árbol del README. |
 | 2026-10-31 | Documentación de motivos de elección | § 2.1 y § 3.1: por qué se eligió cada paquete y qué alternativa se descartó. | OK. |
 | 2026-10-31 | Clarificación de persistencia y proveedor | § 10 (no hay SGBD en la entrega) y § 11 (Azure OpenAI vía API v1). | OK. |
+| 2026-10-31 | Decisiones D1-D5 adoptadas | 1A archivo · 2A Azure + fallback · 3A `gpt-5-mini` · 4A `calculate_incident_priority` · 5A API key con `SecretStr`. | § 11.4 documenta la configuración resultante. |
+| 2026-10-31 | Alta de `app/core/config.py` | `pydantic-settings` con `frozen=True`, `SecretStr`, validación cruzada y `ensure_directories()`. | Verificado con 28 aserciones (28 PASS). Sin dependencias nuevas. |
+| 2026-10-31 | Alineación documental | README §2/§3/§4/§7/§8 y ARCHITECTURE §2/§3.B/§3.D/§4/§5. | Eliminadas referencias a `pip`, `requirements.txt`, Chroma in-memory y `gpt-4o-mini`. |
+| 2026-10-31 | Revisión adversarial con contexto fresco | 6 WARNING + 7 SUGGESTION sobre `config.py` y `.env.example`; ver `docs/AI_DEVELOPMENT_LOG.md` § 6.4. | 6 WARNING corregidos, 5 de 7 sugerencias aplicadas, 2 rechazadas con justificación. |
+| 2026-10-31 | Verificación ampliada | La batería pasó de 28 a 42 aserciones, incluyendo 8 regresiones de la revisión. | `TOTAL 42 \| PASS 42 \| FAIL 0`. |
