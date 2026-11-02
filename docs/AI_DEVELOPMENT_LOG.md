@@ -291,9 +291,8 @@ Observación honesta: `openai_api_key_configured` y `azure_openai_api_key_config
 | Entrypoint ASGI (`app/main.py`) | Completo | `create_app()`, `lifespan` y CORS desde settings |
 | Contratos de chat y ticket (`app/models/chat.py`, `ticket.py`) | Completo | 51 pruebas en `tests/test_models.py` |
 | Datos sintéticos (`data/documents/`, `data/mock_tickets.json`) | Completo | 7 tickets validados (incluye `TCK-104`), 3 manuales RAG y 10 pruebas |
-| Pruebas automatizadas versionadas | 105 pasando | `uv run pytest -q` → `105 passed in 0.55s` |
-| Cierre formal Fase 1 (Revisión adversarial) | Pendiente | Obligatorio antes de abrir Fase 2 (`AGENTS.md` § 7.3) |
-| Servicios RAG y vector store | Pendiente (Fase 2) | — |
+| Servicios RAG y vector store (`app/services/`) | Completo | Ingesta 600/80, Chroma persistente y groundedness (12 pruebas) |
+| Pruebas automatizadas versionadas | 117 pasando | `uv run pytest -q` → `117 passed in 5.03s` |
 | Herramientas y agente LangGraph | Pendiente (Fase 3) | — |
 | Endpoints `/api/v1` | Pendiente (Fase 4) | — |
 | Matriz TC-01…TC-05 | Pendiente (Fase 5) | — |
@@ -313,3 +312,19 @@ Observación honesta: `openai_api_key_configured` y `azure_openai_api_key_config
 | 29 | `uv run ruff check app tests` | Análisis estático de linting e imports. | `All checks passed!` |
 | 30 | `uv run mypy app` | Tipado estricto sin tipos `Any` injustificados. | `Success: no issues found in 9 source files` |
 | 31 | `uv run pytest -q` | Ejecución de la suite completa. | `105 passed in 0.55s` |
+
+### 6.8 Sesión 2026-11-02 — Fase 2: Servicios RAG y Base Vectorial (Chroma + LangChain LCEL)
+
+**Autorización y Limpieza de Repositorio:** el Ingeniero Líder autorizó la continuación con la Fase 2 y solicitó expresamente purgar el directorio `.atl` de todo el historial de Git (Opción 2: `git-filter-branch` sobre `main` e inclusión de `.atl/` en `.gitignore`).
+
+**Implementación de Servicios RAG:**
+1. **`app/services/vector_store.py`:** `VectorStoreService` con Chroma persistente (`hnsw:space="cosine"`), cliente `OpenAIEmbeddings`, métodos síncronos y asíncronos (`asyncio.to_thread`), y función de score de relevancia acotada a `[0.0, 1.0]`.
+2. **`app/services/rag.py`:** `RAGService` con chunking recursivo (600/80), metadatos estructurados (`source`, `chunk_id`), mapeo a `SourceReference` y evaluación determinista de `is_grounded` (D11).
+3. **`tests/test_vector_store.py` y `tests/test_rag.py`:** 12 pruebas unitarias aisladas con `NormalizedDeterministicEmbeddings` sobre `tmp_path`, sin consumir saldo ni requerir red.
+
+**Evidencia de Verificación:**
+- `uv run ruff format --check app tests`: `20 files already formatted`
+- `uv run ruff check app tests`: `All checks passed!`
+- `uv run mypy app`: `Success: no issues found in 12 source files`
+- `uv run pytest -q`: `117 passed in 5.03s`
+

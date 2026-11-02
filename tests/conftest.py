@@ -11,11 +11,14 @@ pytest. Así el ``lifespan`` nunca crea directorios dentro del repositorio.
 
 from __future__ import annotations
 
+import hashlib
+import math
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.embeddings import Embeddings
 
 from app.core.config import Settings, get_settings, reset_settings_cache
 
@@ -80,3 +83,32 @@ def client(settings: Settings) -> Iterator[TestClient]:
 
     with TestClient(create_app()) as test_client:
         yield test_client
+
+
+class NormalizedDeterministicEmbeddings(Embeddings):
+    """Generador determinista de representaciones vectoriales unitarias para pruebas sin red."""
+
+    def __init__(self, size: int = 64) -> None:
+        """Inicializa el generador con la dimensión solicitada."""
+        self.size = size
+
+    def _embed(self, text: str) -> list[float]:
+        """Calcula un vector unitario normalizado a partir del hash SHA-256 del texto."""
+        seed = int(hashlib.sha256(text.encode("utf-8")).hexdigest(), 16)
+        raw = [float((seed >> (i % 64)) & 0xFF) for i in range(self.size)]
+        norm = math.sqrt(sum(x * x for x in raw)) or 1.0
+        return [x / norm for x in raw]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Genera embeddings para una lista de textos."""
+        return [self._embed(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        """Genera embedding para una consulta de texto."""
+        return self._embed(text)
+
+
+@pytest.fixture
+def fake_embeddings() -> NormalizedDeterministicEmbeddings:
+    """Proporciona un generador de embeddings determinista y normalizado para pruebas."""
+    return NormalizedDeterministicEmbeddings()
