@@ -60,6 +60,15 @@ Este documento formaliza la arquitectura del sistema, el flujo de procesamiento 
 * **Alternativas descartadas:** (a) API clásica con `api-version` — obliga a fijar una versión por recurso y complica el *fallback*; (b) `azure-identity` con Managed Identity — más seguro, pero no ejecutable fuera de Azure y el evaluador debe poder correr el proyecto en local; (c) Amazon Bedrock — fuera del ecosistema objetivo y del stack declarado.
 * **Riesgo asumido y mitigación:** la familia `gpt-5*` puede rechazar `temperature` y `max_tokens` (usa `max_completion_tokens`). Por eso `LLM_TEMPERATURE` es **opcional y vacía por defecto**: si no se define, el parámetro **no se envía**. El determinismo se garantiza con esquema de salida validado, *tool calling* tipado y umbral de recuperación, no con la temperatura.
 
+### E. Contratos de datos de la API
+
+Estas decisiones fijan el contrato público de `app/models/chat.py` y `app/models/ticket.py` antes de su implementación. El registro completo —con alternativas descartadas— está en `docs/AI_DEVELOPMENT_LOG.md` § 6.5 (D10-D12).
+
+* **Prioridad compartida (D10):** `Ticket.priority` y `IncidentClassification.severity` usan el mismo enum `Priority` (`low`, `medium`, `high`, `critical`) porque en el alcance de la prueba el mapeo es 1:1. El supuesto queda documentado: si el negocio define prioridades propias que diverjan de la severidad técnica, se separan en dos enums con mapeo explícito.
+* **Fundamentación observable (D11):** la respuesta incluye el campo `grounded`, calculado **exclusivamente** desde el mejor score de recuperación frente a `SIMILARITY_THRESHOLD`. No se delega al LLM ni se infiere del texto de la respuesta. Un valor `False` indica ausencia de contexto suficiente, no incorrección de la respuesta.
+* **Trazabilidad de herramientas (D12):** la respuesta expone un resumen sanitizado (`name`, `success`, `latency_ms`); los argumentos y el resultado completo se persisten en `data/audit/audit.jsonl` y se consultan mediante `GET /api/v1/audit/logs`. Así se demuestra la invocación de herramientas sin acoplar el contrato público a la implementación del agente ni exponer datos personales.
+* **Contratos tipados:** `ChatRequest` limita la consulta a 1–2000 caracteres y prohíbe campos adicionales; `Ticket` refleja el archivo mock con timestamps UTC; `SourceReference` es obligatorio en la respuesta para cumplir el requisito de citar fuentes (§ 5.2 del enunciado).
+
 ---
 
 ## 4. Estrategia de Despliegue en Microsoft Azure

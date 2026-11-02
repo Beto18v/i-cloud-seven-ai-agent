@@ -9,8 +9,9 @@ Este documento define el protocolo estricto de colaboración entre el asistente 
 1. **El Asistente NO ejecuta comandos de terminal destructivos o autónomos sin supervisión:**
    * El asistente debe sugerir los comandos exactos en bloques de código para que el **usuario sea quien los copie, verifique y ejecute** en su entorno local/PowerShell/Bash.
    * **Excepción única:** si el Ingeniero Líder autoriza explícitamente la ejecución en la conversación (por ejemplo, "corre los `uv add`"), el asistente puede ejecutarla, debe declararlo en el chat y registrar la acción en `docs/AI_DEVELOPMENT_LOG.md`.
-2. **El Asistente NO realiza commits ni push automáticos a Git:**
-   * El control de versiones, mensajes de commit convencionales (`feat:`, `fix:`, `docs:`) y despliegues los gestiona y ejecuta exclusivamente el desarrollador.
+2. **Control de Git y Commits:**
+   * El asistente puede realizar commits atómicos de hitos verificables y comprobados (con pruebas pasando, `ruff` y `mypy` limpios) bajo autorización del Ingeniero Líder, utilizando el estándar Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`) con mensajes cortos y claros.
+   * Los despliegues y `git push` a ramas remotas los gestiona y ejecuta exclusivamente el desarrollador.
 3. **Principio de Código Completo y Mantenible:**
    * Prohibido dejar marcadores tipo `// TODO: implementar resto aquí` o funciones a medio terminar.
    * Todo código propuesto debe contar con tipado estricto (Type Hints en Python), validación con Pydantic y docstrings claros.

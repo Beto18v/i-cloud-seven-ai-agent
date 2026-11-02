@@ -136,3 +136,163 @@ De las 7 SUGGESTION se aplicaron 5 (normalización de `BASE_DIR` contra la raíz
 * **Aviso en log al usar `gpt-5*` con `temperature`:** no se registra nada desde el validador (efecto secundario en la construcción del objeto). Se expone `settings.sends_temperature` para que el cliente decida y para que el valor aparezca en `redacted_summary()`.
 
 **Evidencia de la corrección:** la batería de verificación pasó de **28 a 42 aserciones** (8 de ellas cubren regresiones de esta revisión) → `TOTAL 42 | PASS 42 | FAIL 0`. En la primera ejecución 2 aserciones fallaron por un error **de la propia prueba** (buscaban `COLLECTION_NAME` cuando pydantic reporta `collection_name`), no del código; se corrigió la aserción y se documenta el episodio.
+
+### 6.5 Sesión 2026-11-02 — Fase 1: logging estructurado, contratos de salud y entrypoint ASGI
+
+**Autorización:** el Ingeniero Líder solicitó explícitamente implementar esta unidad de trabajo y ejecutar los cuatro comandos de verificación (`ruff`, `ruff format`, `mypy`, `pytest`). No se modificó `app/core/config.py`, no se leyó `.env`, no se instalaron dependencias y no se hizo `git add`, `commit` ni `push`.
+
+| # | Comando / Acción | Motivo | Resultado |
+| :-: | :--- | :--- | :--- |
+| 13 | Creación de `app/core/logging.py`, `app/models/health.py`, `app/models/__init__.py`, `app/main.py` | Materializar el logging JSON con redacción de secretos, el contrato de `/health` y el entrypoint ASGI con `create_app()`. | 4 archivos; `uvicorn app.main:app` deja de fallar por ausencia de módulo. |
+| 14 | Creación de `tests/conftest.py`, `tests/test_config.py`, `tests/test_health.py`, `tests/test_logging.py` | Aislar la suite del `.env` real y cubrir configuración, sonda de salud y seguridad del logging. | 13 pruebas, sin red ni credenciales reales. |
+| 15 | `uv run ruff check app tests` | Calidad estática (incluye reglas `S`, `ASYNC`, `B`, `SIM`). | `All checks passed!` |
+| 16 | `uv run ruff format --check app tests` | Formato obligatorio del proyecto. | `11 files already formatted` |
+| 17 | `uv run mypy app` | Tipado estricto (`disallow_untyped_defs`). | `Success: no issues found in 7 source files` |
+| 18 | `uv run pytest -q` | Evidencia ejecutable de los contratos. | `13 passed in 0.36s` |
+
+#### Decisiones adoptadas (D6-D9)
+
+| ID | Decisión | Alternativa descartada | Justificación |
+| :--: | :--- | :--- | :--- |
+| **D6** | Cadena única de procesadores compartida por structlog y por `logging` mediante `ProcessorFormatter` (`foreign_pre_chain`), con un procesador propio que inyecta `timestamp`, `level`, `logger` y `correlation_id`. | Formatear solo structlog y dejar que `uvicorn`/`fastapi` conserven su formato por defecto. | El requisito exige que los logs de terceros también sean JSON Lines; una sola cadena evita divergencias entre logs nativos y ajenos. |
+| **D7** | Redacción en **dos capas**: (1) por partes de clave normalizadas (camelCase, guion y guion bajo) más detección de `SecretStr`; (2) escaneo de texto posterior a `format_exc_info` sobre `event`, `exception`, argumentos formateados y `extra`. Las métricas numéricas de tokens (`token_count`, `token_usage`, `llm_max_output_tokens`) no se redactan cuando su valor es `int` o `float`. | Coincidencia por subcadena simple; redacción **solo** por clave. | La subcadena simple redactaría texto benigno; la comparación por partes cubre `openai_api_key`, `access_token`, `client_secret` y `X-Api-Key`. La redacción por clave sola no detectaba secretos embebidos en mensajes, tracebacks ni líneas de `uvicorn.access`, de ahí la segunda capa. **Contrapartida aceptada:** el escaneo de texto puede sobrerredactar valores con forma de credencial (`authorization: Bearer ...` produce dos marcadores) y toda clave que contenga `api_key` se redacta aunque su valor sea el booleano de `redacted_summary()`. No se afirma "cero falsos positivos". |
+| **D8** | Aislamiento de pruebas con `monkeypatch.setenv`, `monkeypatch.setitem(Settings.model_config, "env_file", None)`, `reset_settings_cache()` e **importación diferida** de `app.main` dentro de la fixture. | Depender del `.env` local o importar `app.main` a nivel de módulo en los tests. | `pydantic-settings` construye sus fuentes en cada instanciación, así que neutralizar `env_file` elimina por completo la lectura del `.env` real; la importación diferida garantiza que `create_app()` se ejecute después de inyectar el entorno. `monkeypatch` restaura ambos cambios al terminar. |
+| **D9** | `ENVIRONMENT=testing` (no `ENVIRONMENT=test`) en la fixture. | Usar literalmente `test`. | `Environment` solo declara `development`, `testing`, `staging` y `production`; `test` no es un valor válido y haría fallar la configuración. Se documenta la desviación respecto del enunciado de la tarea. |
+
+#### Decisiones de contratos de datos (D10-D12)
+
+Estas decisiones fijan el contrato público de `app/models/chat.py` y `app/models/ticket.py` **antes** de implementarlos. Se adoptan en este punto porque D10 es la menos reversible: afecta al archivo de datos mock y a la forma de la respuesta de la API.
+
+| ID | Decisión | Alternativa descartada | Justificación |
+| :--: | :--- | :--- | :--- |
+| **D10** | Un único enum `Priority` (`low`, `medium`, `high`, `critical`) compartido por `Ticket.priority` y `IncidentClassification.severity`. | Dos enums independientes (`TicketPriority` e `IncidentSeverity`) con una función de mapeo explícita. | En el alcance de la prueba el mapeo es 1:1; compartir el enum elimina duplicación y divergencias de validación. **Supuesto documentado:** si el negocio introduce reglas propias de prioridad (por ejemplo, clientes VIP) que no coincidan con la severidad técnica, se separan los enums y se mapea explícitamente. |
+| **D11** | `ChatResponse.grounded: bool`, calculado **solo** desde el mejor score de recuperación frente a `SIMILARITY_THRESHOLD`. | (a) Preguntar al LLM si su respuesta está fundamentada; (b) inferirlo buscando una frase concreta en el texto. | El umbral es determinista y barato; el auto-reporte del modelo cuesta tokens y no es fiable, y la inferencia textual se rompe al cambiar la redacción. Permite verificar TC-04 sin analizar prosa. `grounded=False` significa "no hubo contexto por encima del umbral", **no** "la respuesta es incorrecta". |
+| **D12** | `ChatResponse.tool_calls` expone únicamente `name`, `success` y `latency_ms`. Los argumentos y el resultado completo se escriben en `data/audit/audit.jsonl` y se consultan en `GET /api/v1/audit/logs`. | (a) Exponer argumentos y resultados completos en la respuesta; (b) no exponer nada y dejar la evidencia solo en los logs. | La versión sanitizada demuestra la invocación de herramientas (TC-02/TC-03) sin acoplar el contrato público a los internos de LangGraph ni arriesgar datos personales en la respuesta. El detalle queda disponible para auditoría. |
+
+#### Estado de avance al cierre de esta unidad
+
+| Componente | Estado | Evidencia |
+| :--- | :--- | :--- |
+| Stack `uv` y `uv.lock` | Completo | 128 paquetes resueltos; `uv lock --check` |
+| Configuración central (`app/core/config.py`) | Completo | Batería de aserciones y revisión adversarial cerrada (§ 6.4) |
+| Logging estructurado (`app/core/logging.py`) | Completo, con correcciones adversariales aplicadas | `tests/test_logging.py`; ver § 6.5.1 |
+| Contrato de salud (`app/models/health.py`) | Completo | `/health` y `/docs` cubiertos con `TestClient` |
+| Entrypoint ASGI (`app/main.py`) | Completo | `create_app()`, `lifespan` y CORS desde settings |
+| Pruebas automatizadas versionadas | 44 pasando | `uv run pytest -q` → `44 passed in 0.41s` (ver § 6.5.1) |
+| Contratos de chat y ticket (`app/models/chat.py`, `ticket.py`) | Pendiente (siguiente unidad) | Decisiones D10-D12 fijadas |
+| Datos sintéticos (`data/documents/`, `data/mock_tickets.json`) | Pendiente | Directorios creados por el `lifespan`, aún vacíos |
+| Servicios RAG y vector store | Pendiente | — |
+| Herramientas y agente | Pendiente | — |
+| API `/api/v1` | Pendiente | — |
+| Dockerfile, IaC y CI/CD | Pendiente | — |
+| Matriz TC-01…TC-05 | Pendiente | — |
+
+> La revisión adversarial de esta unidad está en curso; su resultado se anexará al cerrar la fase, conforme a `AGENTS.md` § 7.3.
+
+#### Riesgos abiertos y hallazgos
+
+1. **Resuelto (§ 6.5.1):** `ruff` clasificaba `app` como tercero porque `src = ["app", "tests"]` apunta al *interior* del paquete. Se añadió `known-first-party = ["app"]` en `[tool.ruff.lint.isort]` y se reordenaron los imports de `tests/`; `ruff check --select I` pasa.
+2. **Resuelto (§ 6.5.1):** la fixture redirige `BASE_DIR` a `tmp_path`, por lo que el `lifespan` ya no crea `data/` dentro del repositorio durante las pruebas. `test_lifespan_creates_directories_under_tmp_path` verifica que `documents`, `vectorstore` y `audit` quedan bajo `tmp_path` y fuera de `PROJECT_ROOT`.
+3. **Resuelto (§ 6.5.1):** `redact_text_secrets` se ejecuta **después** de `format_exc_info`, de modo que el traceback formateado también se inspecciona. Regresión cubierta por `test_redacts_secret_in_formatted_exception`.
+4. **`/health` no comprueba conectividad con el proveedor de IA**, por diseño: es una sonda de *liveness/readiness* y no debe depender de servicios externos. La disponibilidad del proveedor se validará en la fase del cliente LLM. README § 5 se corrigió para no prometer conectividad.
+
+#### Correcciones de la revisión adversarial (unidad logging/health/main)
+
+**Veredicto recibido:** **1 CRITICAL, 6 WARNING, 10 SUGGESTION — BLOCK.**
+
+La revisión adversarial con contexto fresco (`AGENTS.md` § 7.3) se ejecutó sobre `app/core/logging.py`, `app/models/health.py`, `app/models/__init__.py`, `app/main.py`, `tests/conftest.py`, `tests/test_config.py`, `tests/test_health.py`, `tests/test_logging.py`, `docs/AI_DEVELOPMENT_LOG.md` § 6.5 y `pyproject.toml`.
+
+| ID | Severidad | Qué estaba mal | Corrección aplicada | Ubicación |
+| :--: | :--- | :--- | :--- | :--- |
+| **C1** | CRITICAL | `redact_secrets` decidía solo por clave; `event`, `exception` y argumentos formateados no se inspeccionaban. Fuga real en `uvicorn.access`, tracebacks y cabeceras `Cookie`. | Procesador de texto `redact_text` + `redact_text_secrets`, ejecutado **después** de `format_exc_info`; recorre `dict`/`list`/`tuple`/`str`. Se mantiene la redacción por clave. | `app/core/logging.py:225` (`redact_text`), `:293` (`redact_text_secrets`), `:362` (orden de la cadena) |
+| **W1** | WARNING | Denylist incompleta (`credentials`, `connection_string`, `cookie`, `access_key`, `private_key`, `client_secret`, `x-api-key`...). | Partes y compuestos ampliados; normalización camelCase/guion/guion bajo. | `app/core/logging.py:74-110`, `:167` |
+| **W2** | WARNING | `app.*` se clasificaba como tercero y el orden de imports contradecía `AGENTS.md` § 4. | `known-first-party = ["app"]` y reordenación de imports en `tests/`. | `pyproject.toml:47-48`; `tests/*.py` |
+| **W3** | WARNING | Las primeras líneas de `uvicorn` salían en texto plano porque el logging solo se configuraba en el `lifespan`. | `configure_logging(settings)` al inicio de `create_app()` (idempotente) y desconexión de los handlers propios de `uvicorn`. | `app/main.py:71`; `app/core/logging.py:396` |
+| **W4** | WARNING | README prometía "conectividad" en `/health`, que no comprueba servicios externos. | Descripción corregida a sonda *liveness/readiness* sin dependencias externas. | `README.md:138` |
+| **W5** | WARNING | Las pruebas creaban `data/` real dentro del repositorio. | `BASE_DIR` se inyecta como `tmp_path` y una prueba verifica las rutas derivadas. | `tests/conftest.py:58`; `tests/test_health.py:56` |
+| **W6** | WARNING | No había prueba end-to-end de redacción. | Cuatro regresiones de extremo a extremo más el caso `extra={"authorization": ...}`. | `tests/test_logging.py:197-266` |
+
+**Evidencia literal BEFORE/AFTER de C1** (secretos ficticios, `LEAKME`). `BEFORE` es la salida con la redacción antigua (solo por clave); `AFTER` es la salida del escaneo de texto nuevo:
+
+```text
+BEFORE: GET /api/v1/chat?api_key=LEAKME7&x=1 HTTP/1.1
+AFTER:  GET /api/v1/chat?api_key=***REDACTED***&x=1 HTTP/1.1
+BEFORE: RuntimeError: boom sk-LEAKME4
+AFTER:  RuntimeError: boom ***REDACTED***
+BEFORE: headers={'Cookie': 'session=LEAKME6'}
+AFTER:  headers={'Cookie': '***REDACTED***'}
+BEFORE: authorization: Bearer LEAKME5
+AFTER:  authorization: ***REDACTED*** ***REDACTED***
+```
+
+**Sugerencias aplicadas:** S1 (`Processor` en lugar de `Any`), S2 (`ExtraAdder` conserva y redacta `extra=`), S3 (métrica numérica de tokens preservada y D7 corregido), S4 (`asyncio.to_thread` para `ensure_directories`), S5 (`Depends(get_settings)` también en `/`), S6 (aislamiento documentado en el docstring de `app/main.py`), S7 (handlers retirados y cerrados), S8 (`asyncio_default_fixture_loop_scope = "function"`), S9 (smoke test real registrado abajo) y S10 (`_HANDLER_MARKER` importado; archivo con salto de línea final).
+
+**Aislamiento de pruebas (S6):** se mantiene `app = create_app()` a nivel de módulo porque `uvicorn app.main:app` exige un objeto ASGI resoluble; las pruebas siguen importando `create_app` de forma diferida después de inyectar el entorno. La regla queda documentada en el docstring de `app/main.py` y en D8.
+
+**Sugerencias no aplicadas:** ninguna se rechazó. Matiz sobre S7: el `handlers.clear()` no era redundante. Al quitarlo, el smoke test demostró que `uvicorn` conservaba sus handlers y emitía **texto plano duplicado** (`INFO: Started server process [27716]`) antes del JSON. Se sustituyó por `_detach_all_handlers()` explícito, que retira y **cierra** todos los handlers de los loggers gestionados; así se cumple W3 sin la llamada redundante original.
+
+**Verificación de la corrección (salida literal):**
+
+```text
+$ uv run ruff check app tests
+All checks passed!
+
+$ uv run ruff format --check app tests
+11 files already formatted
+
+$ uv run mypy app
+Success: no issues found in 7 source files
+
+$ uv run pytest -q
+44 passed in 0.41s
+```
+
+**Smoke test real de `uvicorn`** (`app.main:app`, puerto 8099):
+
+```text
+STATUS=200
+{"status":"ok","app_name":"Enterprise Legacy Assistant","version":"0.1.0","environment":"development","ai_provider":"openai","timestamp":"2026-11-02T15:42:05.917212Z"}
+--- STDERR (first 6 lines) ---
+{"event": "Started server process [20056]", "color_message": "Started server process [\u001b[36m%d\u001b[0m]", "timestamp": "2026-11-02T15:42:00.775384+00:00", "level": "INFO", "logger": "uvicorn.error"}
+{"event": "Waiting for application startup.", "timestamp": "2026-11-02T15:42:00.775858+00:00", "level": "INFO", "logger": "uvicorn.error"}
+{"app_name": "Enterprise Legacy Assistant", "app_version": "0.1.0", "environment": "development", "debug": false, "ai_provider": "openai", "chat_model": "gpt-5-mini", "embedding_model": "text-embedding-3-small", "llm_base_url": "https://api.openai.com/v1", "llm_temperature": null, "sends_temperature": false, "llm_max_output_tokens": 500, "llm_timeout_seconds": 10.0, "agent_recursion_limit": 5, "chunk_size": 600, "chunk_overlap": 80, "top_k_results": 3, "similarity_threshold": 0.7, "vector_store_space": "cosine", "vector_store_dir": "D:\\Documentos\\Repositories\\demos\\i-cloud-seven-ai-agent\\data\\vectorstore", "openai_api_key_configured": "***REDACTED***", "azure_openai_api_key_configured": "***REDACTED***", "event": "application_startup", "timestamp": "2026-11-02T15:42:00.780862+00:00", "level": "INFO", "logger": "app.main"}
+{"event": "Application startup complete.", "timestamp": "2026-11-02T15:42:00.781367+00:00", "level": "INFO", "logger": "uvicorn.error"}
+{"event": "Uvicorn running on http://127.0.0.1:8099 (Press CTRL+C to quit)", "color_message": "Uvicorn running on \u001b[1m%s://%s:%d\u001b[0m (Press CTRL+C to quit)", "timestamp": "2026-11-02T15:42:00.781870+00:00", "level": "INFO", "logger": "uvicorn.error"}
+{"event": "127.0.0.1:65219 - \"GET /health HTTP/1.1\" 200", "timestamp": "2026-11-02T15:42:05.917212+00:00", "level": "INFO", "logger": "uvicorn.access"}
+```
+
+Observación honesta: `openai_api_key_configured` y `azure_openai_api_key_configured` aparecen como `***REDACTED***` porque sus claves contienen `api_key`. Es sobrerredacción conservadora aceptada: `redacted_summary()` sigue devolviendo booleanos, pero el logger los oculta. Se documenta para que el revisor no lo interprete como un fallo de la sonda.
+
+**Estado:** correcciones aplicadas y verificadas.
+
+### 6.6 Sesión 2026-11-02 — Fase 1: Contratos de datos de dominio y chat (`app/models/`)
+
+**Autorización:** el Ingeniero Líder autorizó explícitamente la implementación de los contratos de datos tras verificar la persistencia en Engram y confirmar las decisiones de diseño (D10 compartida, UUID4 para sesiones, regex `TCK-\d{3,6}` para soportar `TCK-104` del README § 6, regla de SLA determinista para incidentes y compatibilidad de `query` con alias `message`).
+
+**Delegación:** conforme a `AGENTS.md` § 7.1 (implementación que toca 2+ archivos no triviales), la tarea se delegó a un único agente escritor (`model-contracts-writer`) con contexto explícito y restricciones estrictas (sin modificar `.env` ni `config.py`, sin commits de Git, sin placeholders).
+
+| # | Comando / Acción | Motivo | Resultado |
+| :-: | :--- | :--- | :--- |
+| 19 | Creación de `app/models/ticket.py`, `app/models/chat.py` y actualización de `app/models/__init__.py` | Materializar los contratos tipados de dominio (tickets, incidentes) y de transporte HTTP (chat, citas, herramientas). | 3 archivos; 11 contratos y enumeraciones exportados con `frozen=True` y `extra="forbid"`. |
+| 20 | Creación de `tests/test_models.py` | Batería exhaustiva de pruebas unitarias para contratos Pydantic v2. | 51 nuevas pruebas unitarias (casos límite, inmutabilidad, regex, alias, serialización). |
+| 21 | `uv run ruff format app tests` | Formato obligatorio del proyecto. | `14 files left unchanged` |
+| 22 | `uv run ruff check app tests` | Verificación de linting estático e imports (`isort`). | `All checks passed!` |
+| 23 | `uv run mypy app` | Verificación de tipado estricto (`disallow_untyped_defs`). | `Success: no issues found in 9 source files` |
+| 24 | `uv run pytest -q` | Ejecución de la suite completa aislada. | `95 passed in 0.45s` |
+
+#### Estado de avance tras esta unidad
+
+| Componente | Estado | Evidencia |
+| :--- | :--- | :--- |
+| Stack `uv` y `uv.lock` | Completo | 128 paquetes resueltos; `uv lock --check` |
+| Configuración central (`app/core/config.py`) | Completo | 42 aserciones y revisión adversarial cerrada |
+| Logging estructurado (`app/core/logging.py`) | Completo | Escaneo de texto de dos capas validado |
+| Contrato de salud (`app/models/health.py`) | Completo | `/health` y `/docs` cubiertos con `TestClient` |
+| Entrypoint ASGI (`app/main.py`) | Completo | `create_app()`, `lifespan` y CORS desde settings |
+| Contratos de chat y ticket (`app/models/chat.py`, `ticket.py`) | Completo | 51 pruebas en `tests/test_models.py` |
+| Pruebas automatizadas versionadas | 95 pasando | `uv run pytest -q` → `95 passed in 0.45s` |
+| Datos sintéticos (`data/documents/`, `data/mock_tickets.json`) | Pendiente (siguiente unidad) | Directorios listos para ingesta |
+| Servicios RAG y vector store | Pendiente (Fase 2) | — |
+| Herramientas y agente LangGraph | Pendiente (Fase 3) | — |
+| Endpoints `/api/v1` | Pendiente (Fase 4) | — |
+| Matriz TC-01…TC-05 | Pendiente (Fase 5) | — |

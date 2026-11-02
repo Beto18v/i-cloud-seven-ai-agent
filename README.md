@@ -135,7 +135,7 @@ CHUNK_OVERLAP=80
 | `POST` | `/api/v1/documents/ingest` | Procesa, fragmenta e indexa manuales operativos. | `{"force_reindex": bool}` o carga `multipart/form-data` |
 | `GET` | `/api/v1/tickets/{ticket_id}` | Consulta directa de estado en el sistema legado (Mock). | `ticket_id: str` (Path parameter) |
 | `GET` | `/api/v1/audit/logs` | Recupera métricas, trazabilidad y llamadas a herramientas. | `limit: int = 50` |
-| `GET` | `/health` | Chequeo de operatividad del servicio y conectividad. | N/A |
+| `GET` | `/health` | Sonda de *liveness/readiness*: valida que el proceso está vivo y que la configuración cargó. **No** comprueba conectividad con el proveedor de IA ni con servicios externos. | N/A |
 
 ---
 
