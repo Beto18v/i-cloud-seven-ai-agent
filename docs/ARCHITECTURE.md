@@ -117,7 +117,7 @@ graph LR
    * En producción a gran escala, la capa vectorial local se migra a **Azure AI Search** (con indexación híbrida: búsqueda semántica + búsqueda por palabras clave BM25).
 4. **Persistencia de Datos Legados y Auditoría (ruta de producción):**
    * **La entrega ejecutable no usa ningún SGBD.** El sistema legado se simula con `data/mock_tickets.json` y la auditoría se escribe en `data/audit/audit.jsonl` (JSON Lines). Esta decisión es deliberada y se apoya en el enunciado: § 4 admite "base de datos local" y § 5.3 admite explícitamente "archivo JSON". Añadir un motor relacional solo para leer 7 registros mock habría introducido infraestructura que el revisor tendría que levantar, sin aportar valor evaluable.
-   * En producción, tickets y auditoría migran a **Azure Database for PostgreSQL (Flexible Server)** con RLS, **sin cambiar el dominio**: el acceso va detrás de un repositorio (`TicketRepository`, `AuditRepository`) que se sustituye por adaptador. Detalle y trade-offs en `docs/DEPENDENCIAS.md` § 10.
+   * En producción, tickets y auditoría migran a **Azure Database for PostgreSQL (Flexible Server)** con RLS, **sin cambiar el dominio**: el acceso va detrás de un repositorio (`TicketRepository`, `AuditRepository`) que se sustituye por adaptador. Detalle y trade-offs en `docs/DEPENDENCIAS.md` § 5.
 
 ---
 
